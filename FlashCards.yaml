@@ -1,0 +1,21 @@
+flashCards:
+  flashCard:
+    id: 1
+    header: Gravity # topics 
+    front: Value of g # actual question
+    back: 9.8 m/s^2 # answer
+    notes: Gravity in Earth # added information 
+  flashCard:
+    id: 2
+    header: Gravity
+    front: Value of g
+    back: 9.8 m/s^2
+    notes: Gravity in Earth
+  flashCard:
+    id: 2
+    header: Gravity
+    front: Value of g
+    back: 9.8 m/s^2
+    notes: Gravity in Earth
+  
+  
