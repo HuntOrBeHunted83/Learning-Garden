@@ -26,7 +26,6 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var main_exports = {};
 __export(main_exports, {
   ExampleModal: () => ExampleModal,
-  ExampleView: () => ExampleView,
   SQUARE_VIEW: () => SQUARE_VIEW,
   SquareView: () => SquareView,
   VIEW_TYPE_EXAMPLE: () => VIEW_TYPE_EXAMPLE,
@@ -34,7 +33,6 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
-var cardList = [];
 var cards = /* @__PURE__ */ new Map();
 var VIEW_TYPE_EXAMPLE = "example-view";
 var SQUARE_VIEW = "square_view";
@@ -46,20 +44,9 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
       SQUARE_VIEW,
       (leaf) => new SquareView(leaf, this)
     );
-    const item = this.addStatusBarItem();
-    (0, import_obsidian.setIcon)(item, "sun-snow");
     this.addRibbonIcon("sun-snow", "GardenOfGrowth", () => {
       console.log("addRibbonIcon, you!");
       this.activateView();
-    });
-    this.statusBarElement = this.addStatusBarItem().createEl("span");
-    this.readActiveFileAndUpdateLineCount();
-    this.app.workspace.on("editor-change", (editor) => {
-      const content = editor.getDoc().getValue();
-      this.updateLineCount(content);
-    });
-    this.app.workspace.on("active-leaf-change", () => {
-      this.readActiveFileAndUpdateLineCount();
     });
     this.addCommand({
       id: "checkLineForDoubleColon",
@@ -73,8 +60,9 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
           let front = splitText[0];
           let back = splitText[1];
           console.log("lineText splitText, Front, back", lineText, splitText, front, back);
-          cardList.push({
+          cards.set(front + back, {
             id: cardID,
+            name: front,
             front,
             back,
             state: 0,
@@ -84,18 +72,6 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
             reviewedAt: null,
             dueDate: new Date(Date.now() + 24 * 60 * 60 * 1e3)
           });
-          cards.set(cardID, {
-            id: cardID,
-            front,
-            back,
-            state: 0,
-            repetitionCount: 0,
-            interval: 1,
-            easinessFactor: 2.5,
-            reviewedAt: null,
-            dueDate: new Date(Date.now() + 24 * 60 * 60 * 1e3)
-          });
-          console.log("cardList: ", cardList);
           this.saveSettings();
           const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
           for (const leaf of leaves) {
@@ -110,20 +86,6 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
   onunload() {
     this.statusBarElement.remove();
   }
-  async readActiveFileAndUpdateLineCount() {
-    const file = this.app.workspace.getActiveFile();
-    if (file) {
-      const content = await this.app.vault.read(file);
-      this.updateLineCount(content);
-    } else {
-      this.updateLineCount(void 0);
-    }
-  }
-  updateLineCount(fileContent) {
-    const count = fileContent ? fileContent.split(/\r\n|\r|\n/).length : 0;
-    const linesWord = count === 1 ? "line" : "lines";
-    this.statusBarElement.textContent = `${count} ${linesWord}`;
-  }
   generateId(length = 8) {
     const characters = "0123456789";
     let result = "";
@@ -137,7 +99,7 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
     try {
       await this.app.vault.adapter.write(
         "cards.json",
-        JSON.stringify(cardList, null, 2)
+        JSON.stringify(cards, null, 2)
       );
       console.log("Write done", this.app.vault.adapter.getName());
     } catch (e) {
@@ -149,10 +111,9 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
       if (await this.app.vault.adapter.exists("cards.json")) {
         const fileContent = await this.app.vault.adapter.read("cards.json");
         const data = JSON.parse(fileContent);
-        cardList.length = 0;
+        data.length = 0;
         cardList.push(...data);
         console.log("Loaded cards:", cardList);
-        cards.clear();
         for (const card of cardList) {
           cards.set(card.id, card);
         }
@@ -226,30 +187,31 @@ var SquareView = class extends import_obsidian.ItemView {
     const container = this.contentEl;
     container.empty();
     const stateCards = /* @__PURE__ */ new Map();
-    for (const card of cardList) {
+    for (const cardName of cards.keys()) {
+      const card = cards.get(cardName);
       const cardsInState = stateCards.get(card.state) ?? [];
       cardsInState.push(card.id);
       stateCards.set(card.state, cardsInState);
     }
     container.createEl("h2", { text: "Garden Of Growth" });
     const header = ["Seed \u{1F331}", "Pulp \u{1F33F}", "Flower \u{1F339}", "Wilt \u{1F940}"];
+    const color = ["#2d6a4f", "#ed98cdff", "#bbdc50ff", "#9b0cdeff"];
     for (const state of stateCards.keys()) {
       const cardsInState = stateCards.get(state);
       const section = container.createEl("section");
-      section.style.backgroundColor = "#2d6a4f";
+      section.style.backgroundColor = color[state];
       section.style.color = "white";
       section.style.padding = "16px";
       section.style.borderRadius = "8px";
       section.style.margin = "12px";
       section.createEl("h2", { text: header[state] });
       for (const id of stateCards.get(state)) {
-        const reviewButton = section.createEl("button", {
-          text: cards.get(id)?.front,
-          cls: "mod-cta"
-        });
+        const reviewButton = section.createEl("button", { text: cards.get(id)?.front });
+        reviewButton.style.padding = "16px";
+        reviewButton.style.borderRadius = "8px";
+        reviewButton.style.margin = "12px";
         reviewButton.addEventListener("click", async () => {
           console.log(`Reviewing ${id}`);
-          new import_obsidian.Notice(`Opening: ${id}`);
           new ExampleModal(this.app, this.plugin, cards.get(id), (result) => {
             new import_obsidian.Notice(`Hello, ${cards.get(id).back}!`);
             this.onOpen();
@@ -258,52 +220,6 @@ var SquareView = class extends import_obsidian.ItemView {
         console.log("Add button");
       }
     }
-    container.createEl("h6", { text: " \u{1F33F} herbs " });
-    container.createEl("h6", { text: " \u{1F339} flower" });
-    container.createEl("h6", { text: " \u{1F940} wilted" });
-    console.log("print HTML", container.getHTML());
-  }
-  async onClose() {
-  }
-};
-var ExampleView = class extends import_obsidian.ItemView {
-  constructor(leaf, plugin) {
-    super(leaf);
-    this.plugin = plugin;
-  }
-  getViewType() {
-    return VIEW_TYPE_EXAMPLE;
-  }
-  getDisplayText() {
-    return "Example view";
-  }
-  async onOpen() {
-    const container = this.contentEl;
-    container.empty();
-    container.createEl("h4", { text: "Example view" });
-    let array = ["\u{1F331}", "\u{1F33F}", "\u{1F339}", "\u{1F940}"];
-    for (let index = 0; index < cardList.length; index++) {
-      const element = cardList[index];
-      const button = container.createEl("button", {
-        text: array[element.state] + element.front,
-        attr: {
-          type: "button",
-          title: element.front,
-          value: element.id
-        }
-      });
-      button.addEventListener("click", () => {
-        console.log("Button clicked:", element, element.id);
-        new ExampleModal(this.app, this.plugin, element, (result) => {
-          new import_obsidian.Notice(`Hello, ${element.back}!`);
-          this.onOpen();
-        }).open();
-      });
-      console.log("Add button");
-    }
-    container.createEl("h6", { text: " \u{1F33F} herbs " });
-    container.createEl("h6", { text: " \u{1F339} flower" });
-    container.createEl("h6", { text: " \u{1F940} wilted" });
   }
   async onClose() {
   }
