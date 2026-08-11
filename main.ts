@@ -13,6 +13,7 @@ import {
 
 interface Card {
 	id: string,
+	name: string,
 	front: string,
 	back: string,
 	state: number,
@@ -23,10 +24,8 @@ interface Card {
 	dueDate: Date,
 }
 
-const cardList: Card[] = [];
-const cards = new Map<String, Card>();
 
-
+let cards = new Map<String, Card>();
 
 export const VIEW_TYPE_EXAMPLE = "example-view";
 export const SQUARE_VIEW = "square_view";
@@ -44,25 +43,10 @@ export default class ExamplePlugin extends Plugin {
 			(leaf: WorkspaceLeaf) => new SquareView(leaf, this)
 		);
 
-		const item = this.addStatusBarItem();
-		setIcon(item, "sun-snow");
 
 		this.addRibbonIcon("sun-snow", "GardenOfGrowth", () => {
 			console.log("addRibbonIcon, you!");
 			this.activateView();
-		});
-
-		this.statusBarElement = this.addStatusBarItem().createEl("span");
-
-		this.readActiveFileAndUpdateLineCount();
-
-		this.app.workspace.on("editor-change", (editor) => {
-			const content = editor.getDoc().getValue();
-			this.updateLineCount(content);
-		});
-
-		this.app.workspace.on("active-leaf-change", () => {
-			this.readActiveFileAndUpdateLineCount();
 		});
 
 		this.addCommand({
@@ -81,20 +65,9 @@ export default class ExamplePlugin extends Plugin {
 
 					console.log("lineText splitText, Front, back", lineText, splitText, front, back);
 
-					cardList.push({
-						id: cardID,
-						front: front,
-						back: back,
-						state: 0,
-						repetitionCount: 0,
-						interval: 1,
-						easinessFactor: 2.5,
-						reviewedAt: null,
-						dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
-					});
-
 					cards.set(front, {
 						id: cardID,
+						name: front,
 						front: front,
 						back: back,
 						state: 0,
@@ -104,8 +77,6 @@ export default class ExamplePlugin extends Plugin {
 						reviewedAt: null,
 						dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
 					});
-
-					console.log("cardList: ", cardList);
 					this.saveSettings();
 
 					const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
@@ -126,26 +97,6 @@ export default class ExamplePlugin extends Plugin {
 		this.statusBarElement.remove();
 	}
 
-	private async readActiveFileAndUpdateLineCount() {
-		const file = this.app.workspace.getActiveFile();
-
-		if (file) {
-			const content = await this.app.vault.read(file);
-			this.updateLineCount(content);
-		} else {
-			this.updateLineCount(undefined);
-		}
-	}
-
-	private updateLineCount(fileContent?: string) {
-		const count = fileContent
-			? fileContent.split(/\r\n|\r|\n/).length
-			: 0;
-
-		const linesWord = count === 1 ? "line" : "lines";
-		this.statusBarElement.textContent = `${count} ${linesWord}`;
-	}
-
 	generateId(length: number = 8): string {
 		const characters = "0123456789";
 		let result = "";
@@ -162,8 +113,9 @@ export default class ExamplePlugin extends Plugin {
 		try {
 			await this.app.vault.adapter.write(
 				"cards.json",
-				JSON.stringify(cardList, null, 2)
+				JSON.stringify([...cards], null, 2)
 			);
+
 
 			console.log("Write done", this.app.vault.adapter.getName());
 		} catch (e) {
@@ -175,17 +127,10 @@ export default class ExamplePlugin extends Plugin {
 		try {
 			if (await this.app.vault.adapter.exists("cards.json")) {
 				const fileContent = await this.app.vault.adapter.read("cards.json");
-				const data: Card[] = JSON.parse(fileContent);
+				const data = JSON.parse(fileContent);
 
-				cardList.length = 0;
-				cardList.push(...data);
-
-				console.log("Loaded cards:", cardList);
-
-				cards.clear();
-				for (const card of cardList) {
-					cards.set(card.id, card);
-				}
+				cards = new Map(data)
+				console.log("read", data, cards)
 
 			}
 		} catch (error) {
@@ -220,10 +165,9 @@ export default class ExamplePlugin extends Plugin {
 		} else {
 			if (card.repetitionCount === 0) {
 				card.interval = 1;
-				card.state = 1;
 			} else if (card.repetitionCount === 1) {
 				card.interval = 6;
-
+				card.state = 1;
 			} else {
 				card.interval = Math.round(card.interval * card.easinessFactor);
 			}
@@ -280,41 +224,59 @@ export class SquareView extends ItemView {
 
 		const stateCards = new Map<number, String[]>();
 
-		for (const card of cardList) {
+		for (const cardName of cards.keys()) {
+			const card: Card = cards.get(cardName);
+
 			const cardsInState = stateCards.get(card.state) ?? [];
-			cardsInState.push(card.id);
+			cardsInState.push(card.name);
 			stateCards.set(card.state, cardsInState);
 		}
 
 		container.createEl("h2", { text: "Garden Of Growth" });
 
 		const header = ["Seed 🌱", "Pulp 🌿", "Flower 🌹", "Wilt 🥀"]
+		const color = [
+			"#67C7FF", // sky blue
+			"#FFB86B", // warm orange
+			"#FF6F91", // coral pink
+			"#A78BFA", // soft violet
+		];
 
+		const colors = [
+			"#1E5F9E", // deep blue — pairs with sky blue
+			"#B85C16", // burnt orange — pairs with warm orange
+			"#B52D52", // deep rose — pairs with coral pink
+			"#5B3A9A", // deep indigo — pairs with soft violet
+		];
 		for (const state of stateCards.keys()) {
 			const cardsInState = stateCards.get(state);
 
 			const section = container.createEl("section");
-			section.style.backgroundColor = "#2d6a4f";
+			section.style.backgroundColor = color[state]
 			section.style.color = "white";
 			section.style.padding = "16px";
 			section.style.borderRadius = "8px";
 			section.style.margin = "12px";
 
-			section.createEl("h2", { text: header[state] });
+			const title = section.createEl("h2", { text: header[state] });
+			title.style.color = "#000000ff";
 
 			for (const id of stateCards.get(state)) {
-				const reviewButton = section.createEl("button", {
-					text: cards.get(id)?.front,
-					cls: "mod-cta"
-				});
+				console.log(id, cards.get(id))
+				let front = cards.get(id)?.front;
+				const reviewButton = section.createEl("button", { text: front });
+				reviewButton.style.backgroundColor = colors[state]
+				// reviewButton.style.color = "#000000ff";
+
+				reviewButton.style.padding = "16px";
+				reviewButton.style.borderRadius = "8px";
+				reviewButton.style.margin = "12px";
 
 				reviewButton.addEventListener("click", async () => {
 					console.log(`Reviewing ${id}`);
 
 					// Run your review logic here:
-					// this.plugin.reviewCard(card.id);
-
-					new Notice(`Opening: ${id}`);
+					console.log("modal", cards.get(id));
 					new ExampleModal(this.app, this.plugin, cards.get(id), (result) => {
 						new Notice(`Hello, ${cards.get(id).back}!`);
 						this.onOpen();
@@ -323,79 +285,16 @@ export class SquareView extends ItemView {
 
 				console.log("Add button");
 			}
-
 		}
 
-		container.createEl("h6", { text: " 🌿 herbs " });
-		container.createEl("h6", { text: " 🌹 flower" });
-		container.createEl("h6", { text: " 🥀 wilted" });
-		console.log("print HTML", container.getHTML())
-	}
-
-	async onClose() {
-		// save
-	}
-
-
-}
-
-export class ExampleView extends ItemView {
-	plugin: ExamplePlugin;
-	constructor(leaf: WorkspaceLeaf, plugin: ExamplePlugin) {
-		super(leaf);
-		this.plugin = plugin;
-	}
-
-
-	getViewType() {
-		return VIEW_TYPE_EXAMPLE;
-	}
-
-	getDisplayText() {
-		return "Example view";
-	}
-
-	async onOpen() {
-		const container = this.contentEl;
-		container.empty();
-
-		container.createEl("h4", { text: "Example view" });
-
-		let array = ["🌱", "🌿", "🌹", "🥀"];
-
-		for (let index = 0; index < cardList.length; index++) {
-			const element = cardList[index];
-
-			const button = container.createEl("button", {
-				text: array[element.state] + element.front,
-				attr: {
-					type: "button",
-					title: element.front,
-					value: element.id
-				}
-			});
-
-			button.addEventListener("click", () => {
-				console.log("Button clicked:", element, element.id);
-
-				new ExampleModal(this.app, this.plugin, element, (result) => {
-					new Notice(`Hello, ${element.back}!`);
-					this.onOpen();
-				}).open();
-			});
-
-			console.log("Add button");
-		}
-
-		container.createEl("h6", { text: " 🌿 herbs " });
-		container.createEl("h6", { text: " 🌹 flower" });
-		container.createEl("h6", { text: " 🥀 wilted" });
 	}
 
 	async onClose() {
 		// save
 	}
 }
+
+
 
 export class ExampleModal extends Modal {
 	constructor(app: App, plugin: ExamplePlugin, card: Card, onSubmit: (result: string) => void) {

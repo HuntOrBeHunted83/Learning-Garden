@@ -60,7 +60,7 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
           let front = splitText[0];
           let back = splitText[1];
           console.log("lineText splitText, Front, back", lineText, splitText, front, back);
-          cards.set(front + back, {
+          cards.set(front, {
             id: cardID,
             name: front,
             front,
@@ -99,7 +99,7 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
     try {
       await this.app.vault.adapter.write(
         "cards.json",
-        JSON.stringify(cards, null, 2)
+        JSON.stringify([...cards], null, 2)
       );
       console.log("Write done", this.app.vault.adapter.getName());
     } catch (e) {
@@ -111,12 +111,8 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
       if (await this.app.vault.adapter.exists("cards.json")) {
         const fileContent = await this.app.vault.adapter.read("cards.json");
         const data = JSON.parse(fileContent);
-        data.length = 0;
-        cardList.push(...data);
-        console.log("Loaded cards:", cardList);
-        for (const card of cardList) {
-          cards.set(card.id, card);
-        }
+        cards = new Map(data);
+        console.log("read", data, cards);
       }
     } catch (error) {
       console.error("Could not load cards.json:", error);
@@ -145,9 +141,9 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
     } else {
       if (card.repetitionCount === 0) {
         card.interval = 1;
-        card.state = 1;
       } else if (card.repetitionCount === 1) {
         card.interval = 6;
+        card.state = 1;
       } else {
         card.interval = Math.round(card.interval * card.easinessFactor);
       }
@@ -190,12 +186,23 @@ var SquareView = class extends import_obsidian.ItemView {
     for (const cardName of cards.keys()) {
       const card = cards.get(cardName);
       const cardsInState = stateCards.get(card.state) ?? [];
-      cardsInState.push(card.id);
+      cardsInState.push(card.name);
       stateCards.set(card.state, cardsInState);
     }
     container.createEl("h2", { text: "Garden Of Growth" });
     const header = ["Seed \u{1F331}", "Pulp \u{1F33F}", "Flower \u{1F339}", "Wilt \u{1F940}"];
-    const color = ["#2d6a4f", "#ed98cdff", "#bbdc50ff", "#9b0cdeff"];
+    const color = [
+      "#67C7FF",
+      "#FFB86B",
+      "#FF6F91",
+      "#A78BFA"
+    ];
+    const colors = [
+      "#1E5F9E",
+      "#B85C16",
+      "#B52D52",
+      "#5B3A9A"
+    ];
     for (const state of stateCards.keys()) {
       const cardsInState = stateCards.get(state);
       const section = container.createEl("section");
@@ -204,14 +211,19 @@ var SquareView = class extends import_obsidian.ItemView {
       section.style.padding = "16px";
       section.style.borderRadius = "8px";
       section.style.margin = "12px";
-      section.createEl("h2", { text: header[state] });
+      const title = section.createEl("h2", { text: header[state] });
+      title.style.color = "#000000ff";
       for (const id of stateCards.get(state)) {
-        const reviewButton = section.createEl("button", { text: cards.get(id)?.front });
+        console.log(id, cards.get(id));
+        let front = cards.get(id)?.front;
+        const reviewButton = section.createEl("button", { text: front });
+        reviewButton.style.backgroundColor = colors[state];
         reviewButton.style.padding = "16px";
         reviewButton.style.borderRadius = "8px";
         reviewButton.style.margin = "12px";
         reviewButton.addEventListener("click", async () => {
           console.log(`Reviewing ${id}`);
+          console.log("modal", cards.get(id));
           new ExampleModal(this.app, this.plugin, cards.get(id), (result) => {
             new import_obsidian.Notice(`Hello, ${cards.get(id).back}!`);
             this.onOpen();
