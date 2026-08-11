@@ -95,3 +95,83 @@ Possible future features:
    - Daily streak of completed reviews.
    - Number of cards needing review today.
    - Retention metrics.
+
+
+
+
+
+Upcoming Tasks  
+
+    DashboardView
+        Actions
+            Upload FlashCard File
+            Show a Garden Card in [ALL] states
+        Show
+            Stats
+    GardenCard View
+        Action
+            Show back 
+            Show Quality states
+        Show
+            GardenCard header
+            GardenCard Front
+ 
+        
+    
+
+
+
+    First 
+        User Input
+            User should upload a file
+                File should be in a specfic format or an error will occurN
+        GardenCard is created for each flashcard
+            Following Info is Set
+                NoOfRepetitions = 0
+                EasinessFactor = 2.5
+                LastReviewDate = "null"
+                IntervalDays = 1
+        GardenCard is saved in storge system
+    Second
+        Create a user dashboard
+            Following Functionalities
+                Uploading a flashcard file + process it [button]
+                Show the current state of the garden  
+                    seeds [button]
+                        Image of the seeds 
+                        Number of seeds
+                    sprouts [button]
+                        Image of the sprouts 
+                        Number of sprouts
+                    flowers [button]
+                        Image of the flowers 
+                        Number of flowers
+                    wilted [button]
+                        Image of the wilted 
+                        Number of wilted
+                Show the following stats
+                    Current user streak
+                    Cards due today 
+                    Retention Rate
+
+
+GardenManager
+    init()
+        readGardenCards()
+    readGardenCards()
+        Read Garden File()
+    getGardenCards()
+        {{seed, 20}, {wiltted, 10}, {'sprouted', 2}}
+    uploadFlashCardFile(filename)
+
+
+
+Task 1 
+    Convert Garden Cards values from yaml into python
+        Function getGardenCardValue (YAML file)
+            
+
+
+    
+
+    
