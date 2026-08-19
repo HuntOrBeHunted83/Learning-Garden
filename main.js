@@ -25,26 +25,24 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // main.ts
 var main_exports = {};
 __export(main_exports, {
-  ExampleModal: () => ExampleModal,
-  SQUARE_VIEW: () => SQUARE_VIEW,
   SquareView: () => SquareView,
-  VIEW_TYPE_EXAMPLE: () => VIEW_TYPE_EXAMPLE,
-  default: () => ExamplePlugin
+  default: () => GardenOfMemoryPlugin
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
+var ONE_DAY_MS = 24 * 60 * 60 * 1e3;
 var cards = /* @__PURE__ */ new Map();
-var VIEW_TYPE_EXAMPLE = "example-view";
-var SQUARE_VIEW = "square_view";
-var ExamplePlugin = class extends import_obsidian.Plugin {
+var GARDEN_OF_MEMORY_VIEW = "GARDEN_OF_MEMORY_VIEW";
+var GARDEN_OF_MEMORY_JSON = "GardenOfMemory.json";
+var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
   async onload() {
-    console.log("GardenOfGrowth loading...");
+    console.log("GardenOfMemory loading...");
     await this.loadSettings();
     this.registerView(
-      SQUARE_VIEW,
+      GARDEN_OF_MEMORY_VIEW,
       (leaf) => new SquareView(leaf, this)
     );
-    this.addRibbonIcon("sun-snow", "GardenOfGrowth", () => {
+    this.addRibbonIcon("sun-snow", "GardenOfMemory", () => {
       console.log("addRibbonIcon, you!");
       this.activateView();
     });
@@ -69,11 +67,11 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
             repetitionCount: 0,
             interval: 1,
             easinessFactor: 2.5,
-            reviewedAt: null,
-            dueDate: new Date(Date.now() + 24 * 60 * 60 * 1e3)
+            reviewedAt: 0,
+            dueDate: Date.now() + ONE_DAY_MS
           });
           this.saveSettings();
-          const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
+          const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
           for (const leaf of leaves) {
             leaf.rebuildView();
           }
@@ -98,7 +96,7 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
   async saveSettings() {
     try {
       await this.app.vault.adapter.write(
-        "cards.json",
+        GARDEN_OF_MEMORY_JSON,
         JSON.stringify([...cards], null, 2)
       );
       console.log("Write done", this.app.vault.adapter.getName());
@@ -108,27 +106,27 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
   }
   async loadSettings() {
     try {
-      if (await this.app.vault.adapter.exists("cards.json")) {
-        const fileContent = await this.app.vault.adapter.read("cards.json");
+      if (await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
+        const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
         const data = JSON.parse(fileContent);
         cards = new Map(data);
         console.log("read", data, cards);
       }
     } catch (error) {
-      console.error("Could not load cards.json:", error);
+      console.error("Could not load GARDEN_OF_MEMORY_JSON:", error);
     }
   }
   async activateView() {
     const { workspace } = this.app;
     let leaf = null;
-    const leaves = workspace.getLeavesOfType(SQUARE_VIEW);
+    const leaves = workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
     if (leaves.length > 0) {
       leaf = leaves[0];
       console.log("HTML");
     } else {
       leaf = workspace.getRightLeaf(false);
-      await leaf.setViewState({
-        type: SQUARE_VIEW,
+      await leaf?.setViewState({
+        type: GARDEN_OF_MEMORY_VIEW,
         active: true
       });
     }
@@ -156,12 +154,9 @@ var ExamplePlugin = class extends import_obsidian.Plugin {
     if (card.easinessFactor > 3.5) {
       card.state = 3;
     }
-    card.reviewedAt = new Date();
-    const dueDate = new Date(card.reviewedAt);
-    dueDate.setDate(dueDate.getDate() + card.interval);
-    card.dueDate = dueDate;
-    const now = new Date();
-    if (card.dueDate.getTime() <= now.getTime()) {
+    card.reviewedAt = Date.now();
+    card.dueDate = card.reviewedAt + card.interval * ONE_DAY_MS;
+    if (card.dueDate <= Date.now()) {
       card.state = 4;
     }
     return card;
@@ -173,7 +168,7 @@ var SquareView = class extends import_obsidian.ItemView {
     this.plugin = plugin;
   }
   getViewType() {
-    return SQUARE_VIEW;
+    return GARDEN_OF_MEMORY_VIEW;
   }
   getDisplayText() {
     return "Square view";
@@ -183,13 +178,18 @@ var SquareView = class extends import_obsidian.ItemView {
     const container = this.contentEl;
     container.empty();
     const stateCards = /* @__PURE__ */ new Map();
+    let dueToday = 0;
     for (const cardName of cards.keys()) {
       const card = cards.get(cardName);
       const cardsInState = stateCards.get(card.state) ?? [];
       cardsInState.push(card.name);
       stateCards.set(card.state, cardsInState);
+      if (Math.abs(Date.now() - card.dueDate) < ONE_DAY_MS) {
+        dueToday = dueToday + 1;
+      }
     }
-    container.createEl("h2", { text: "Garden Of Growth" });
+    console.log("stateCards", stateCards);
+    container.createEl("h1", { text: "Garden Of Memory" });
     const header = ["Seed \u{1F331}", "Pulp \u{1F33F}", "Flower \u{1F339}", "Wilt \u{1F940}"];
     const color = [
       "#67C7FF",
@@ -211,8 +211,8 @@ var SquareView = class extends import_obsidian.ItemView {
       section.style.padding = "16px";
       section.style.borderRadius = "8px";
       section.style.margin = "12px";
-      const title = section.createEl("h2", { text: header[state] });
-      title.style.color = "#000000ff";
+      const title2 = section.createEl("h1", { text: header[state] });
+      title2.style.color = "#000000ff";
       for (const id of stateCards.get(state)) {
         console.log(id, cards.get(id));
         let front = cards.get(id)?.front;
@@ -232,6 +232,22 @@ var SquareView = class extends import_obsidian.ItemView {
         console.log("Add button");
       }
     }
+    const stats = container.createEl("section");
+    stats.style.backgroundColor = "#602af7ff";
+    stats.style.color = "white";
+    stats.style.padding = "16px";
+    stats.style.borderRadius = "8px";
+    stats.style.margin = "12px";
+    const title = stats.createEl("h2", { text: "Dashboard" });
+    title.style.color = "#010003ff";
+    let ret = Number(stateCards.get(3)?.length) / Number(cards.size) * 100;
+    stats.createEl("h3", { text: "Rate of Retention : " + ret });
+    stats.createEl("h3", { text: "Cards due today 	: " + dueToday });
+    stats.createEl("h3", { text: "Total Cards 			: " + cards.size });
+    stats.createEl("h6", { text: "	No of Seed [\u{1F331}] Cards   : " + stateCards.get(0)?.length });
+    stats.createEl("h6", { text: "	No of Fern [\u{1F33F}] Cards   : " + stateCards.get(1)?.length });
+    stats.createEl("h6", { text: "	No of Flower [\u{1F339}] Cards : " + stateCards.get(2)?.length });
+    stats.createEl("h6", { text: "	No of Wilter [\u{1F940}] Cards : " + stateCards.get(3)?.length });
   }
   async onClose() {
   }
@@ -291,7 +307,7 @@ var ExampleModal = class extends import_obsidian.Modal {
               console.log("3 clicked");
               plugin.sm2(card, 5);
               plugin.saveSettings();
-              const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
+              const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
               for (const leaf of leaves) {
                 leaf.rebuildView();
               }

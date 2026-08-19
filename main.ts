@@ -1,4 +1,5 @@
 import {
+	TFile,
 	Modal,
 	ItemView,
 	setIcon,
@@ -20,31 +21,33 @@ interface Card {
 	repetitionCount: number,
 	interval: number,
 	easinessFactor: number,
-	reviewedAt: Date | null,
-	dueDate: Date,
+	reviewedAt: number,
+	dueDate: number,
 }
 
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 let cards = new Map<String, Card>();
 
-export const VIEW_TYPE_EXAMPLE = "example-view";
-export const SQUARE_VIEW = "square_view";
+const GARDEN_OF_MEMORY_VIEW = "GARDEN_OF_MEMORY_VIEW";
+const GARDEN_OF_MEMORY_JSON = "GardenOfMemory.json"
 
-export default class ExamplePlugin extends Plugin {
+export default class GardenOfMemoryPlugin extends Plugin {
+
 	statusBarElement!: HTMLSpanElement;
 
 	async onload() {
-		console.log("GardenOfGrowth loading...");
+		console.log("GardenOfMemory loading...");
 
 		await this.loadSettings();
 
 		this.registerView(
-			SQUARE_VIEW,
+			GARDEN_OF_MEMORY_VIEW,
 			(leaf: WorkspaceLeaf) => new SquareView(leaf, this)
 		);
 
 
-		this.addRibbonIcon("sun-snow", "GardenOfGrowth", () => {
+		this.addRibbonIcon("sun-snow", "GardenOfMemory", () => {
 			console.log("addRibbonIcon, you!");
 			this.activateView();
 		});
@@ -74,12 +77,12 @@ export default class ExamplePlugin extends Plugin {
 						repetitionCount: 0,
 						interval: 1,
 						easinessFactor: 2.5,
-						reviewedAt: null,
-						dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
+						reviewedAt: 0,
+						dueDate: Date.now() + ONE_DAY_MS,
 					});
 					this.saveSettings();
 
-					const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
+					const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
 
 					for (const leaf of leaves) {
 						leaf.rebuildView();
@@ -112,7 +115,7 @@ export default class ExamplePlugin extends Plugin {
 	async saveSettings() {
 		try {
 			await this.app.vault.adapter.write(
-				"cards.json",
+				GARDEN_OF_MEMORY_JSON,
 				JSON.stringify([...cards], null, 2)
 			);
 
@@ -125,8 +128,8 @@ export default class ExamplePlugin extends Plugin {
 
 	async loadSettings() {
 		try {
-			if (await this.app.vault.adapter.exists("cards.json")) {
-				const fileContent = await this.app.vault.adapter.read("cards.json");
+			if (await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
+				const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
 				const data = JSON.parse(fileContent);
 
 				cards = new Map(data)
@@ -134,7 +137,7 @@ export default class ExamplePlugin extends Plugin {
 
 			}
 		} catch (error) {
-			console.error("Could not load cards.json:", error);
+			console.error("Could not load GARDEN_OF_MEMORY_JSON:", error);
 		}
 	}
 
@@ -142,15 +145,15 @@ export default class ExamplePlugin extends Plugin {
 		const { workspace } = this.app;
 
 		let leaf: WorkspaceLeaf | null = null;
-		const leaves = workspace.getLeavesOfType(SQUARE_VIEW);
+		const leaves = workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
 
 		if (leaves.length > 0) {
 			leaf = leaves[0];
 			console.log("HTML")
 		} else {
 			leaf = workspace.getRightLeaf(false);
-			await leaf.setViewState({
-				type: SQUARE_VIEW,
+			await leaf?.setViewState({
+				type: GARDEN_OF_MEMORY_VIEW,
 				active: true
 			});
 		}
@@ -187,15 +190,9 @@ export default class ExamplePlugin extends Plugin {
 			card.state = 3;
 		}
 
-		card.reviewedAt = new Date();
-		const dueDate = new Date(card.reviewedAt);
-		dueDate.setDate(dueDate.getDate() + card.interval);
-		card.dueDate = dueDate;
-
-
-		const now = new Date();
-
-		if (card.dueDate.getTime() <= now.getTime()) {
+		card.reviewedAt = Date.now();
+		card.dueDate = card.reviewedAt + card.interval * ONE_DAY_MS;
+		if (card.dueDate <= Date.now()) {
 			card.state = 4;
 		}
 		return card;
@@ -203,14 +200,14 @@ export default class ExamplePlugin extends Plugin {
 }
 
 export class SquareView extends ItemView {
-	plugin: ExamplePlugin;
-	constructor(leaf: WorkspaceLeaf, plugin: ExamplePlugin) {
+	plugin: GardenOfMemoryPlugin;
+	constructor(leaf: WorkspaceLeaf, plugin: GardenOfMemoryPlugin) {
 		super(leaf);
 		this.plugin = plugin;
 	}
 
 	getViewType() {
-		return SQUARE_VIEW;
+		return GARDEN_OF_MEMORY_VIEW;
 	}
 
 	getDisplayText() {
@@ -223,6 +220,7 @@ export class SquareView extends ItemView {
 		container.empty();
 
 		const stateCards = new Map<number, String[]>();
+		let dueToday = 0
 
 		for (const cardName of cards.keys()) {
 			const card: Card = cards.get(cardName);
@@ -230,9 +228,13 @@ export class SquareView extends ItemView {
 			const cardsInState = stateCards.get(card.state) ?? [];
 			cardsInState.push(card.name);
 			stateCards.set(card.state, cardsInState);
+			if (Math.abs(Date.now() - card.dueDate) < ONE_DAY_MS) {
+				dueToday = dueToday + 1
+			}
 		}
+		console.log("stateCards", stateCards)
 
-		container.createEl("h2", { text: "Garden Of Growth" });
+		container.createEl("h1", { text: "Garden Of Memory" });
 
 		const header = ["Seed 🌱", "Pulp 🌿", "Flower 🌹", "Wilt 🥀"]
 		const color = [
@@ -248,6 +250,7 @@ export class SquareView extends ItemView {
 			"#B52D52", // deep rose — pairs with coral pink
 			"#5B3A9A", // deep indigo — pairs with soft violet
 		];
+
 		for (const state of stateCards.keys()) {
 			const cardsInState = stateCards.get(state);
 
@@ -257,8 +260,9 @@ export class SquareView extends ItemView {
 			section.style.padding = "16px";
 			section.style.borderRadius = "8px";
 			section.style.margin = "12px";
+			//section.style.height = "900px";
 
-			const title = section.createEl("h2", { text: header[state] });
+			const title = section.createEl("h1", { text: header[state] });
 			title.style.color = "#000000ff";
 
 			for (const id of stateCards.get(state)) {
@@ -287,6 +291,26 @@ export class SquareView extends ItemView {
 			}
 		}
 
+		const stats = container.createEl("section");
+		stats.style.backgroundColor = "#602af7ff";
+		stats.style.color = "white";
+		stats.style.padding = "16px";
+		stats.style.borderRadius = "8px";
+		stats.style.margin = "12px";
+
+
+		const title = stats.createEl("h2", { text: "Dashboard" });
+		title.style.color = "#010003ff";
+
+		let ret = Number(stateCards.get(3)?.length) / Number(cards.size) * 100
+
+		stats.createEl("h3", { text: "Rate of Retention : " + ret })
+		stats.createEl("h3", { text: "Cards due today 	: " + dueToday })
+		stats.createEl("h3", { text: "Total Cards 			: " + cards.size })
+		stats.createEl("h6", { text: "	No of Seed [🌱] Cards   : " + stateCards.get(0)?.length })
+		stats.createEl("h6", { text: "	No of Fern [🌿] Cards   : " + stateCards.get(1)?.length })
+		stats.createEl("h6", { text: "	No of Flower [🌹] Cards : " + stateCards.get(2)?.length })
+		stats.createEl("h6", { text: "	No of Wilter [🥀] Cards : " + stateCards.get(3)?.length })
 	}
 
 	async onClose() {
@@ -296,8 +320,8 @@ export class SquareView extends ItemView {
 
 
 
-export class ExampleModal extends Modal {
-	constructor(app: App, plugin: ExamplePlugin, card: Card, onSubmit: (result: string) => void) {
+class ExampleModal extends Modal {
+	constructor(app: App, plugin: GardenOfMemoryPlugin, card: Card, onSubmit: (result: string) => void) {
 		super(app);
 
 		let icons = ["", "🌱", "🌿", "🌹", "🥀"];
@@ -370,7 +394,7 @@ export class ExampleModal extends Modal {
 									plugin.sm2(card, 5)
 									plugin.saveSettings();
 
-									const leaves = this.app.workspace.getLeavesOfType(SQUARE_VIEW);
+									const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
 
 									for (const leaf of leaves) {
 										leaf.rebuildView();
@@ -384,3 +408,4 @@ export class ExampleModal extends Modal {
 		);
 	}
 }
+
