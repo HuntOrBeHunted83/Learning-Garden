@@ -1,177 +1,122 @@
-# Name Meanings
+# 🌱 Garden of Memory
 
-## FlashCard
-A normal flashcard with the following fields:
+A simple spaced-repetition flashcard plugin for Obsidian. Cards grow through four stages — Seed, Pulp, Flower, Wilt — as you review them, styled as a "garden" dashboard in the sidebar.
 
-  - `id`
-  - `header`
-  - `front`
-  - `back`
-  - `note`
+## Features
 
-  **User input:**
-  - Header
-  - Front
-  - Back
-  - Notes
+- Turn any line containing `::` into a flashcard (front `::` back)
+- Review cards in a dedicated sidebar view, grouped by growth stage
+- Grading uses an SM-2-style spaced repetition algorithm to schedule the next review
+- Dashboard stats: retention rate, cards due today, and a per-stage count
+- Data is stored as plain JSON in your vault, so it's portable and syncs with your vault as-is
 
-## GardenCard
-A flashcard with additional spaced-repetition data:
+## Installation
 
-  - `NoOfRepetitions`
-  - `EasinessFactor`
-  - `LastReviewDate`
-  - `IntervalDays`
+1. Copy `main.ts` (compiled to `main.js`), `manifest.json`, and `styles.css` (if present) into `<your-vault>/.obsidian/plugins/garden-of-memory/`
+2. Reload Obsidian, then enable **Garden of Memory** under **Settings → Community plugins**
 
-## GardenStates
-Computed from `LastReviewDate` and `IntervalDays` for each `GardenCard`.
+## Usage
 
-  - **Seed:** `LastReviewDate` is `NULL`.
-  - **Sprout:** reviewed once; `NoOfRepetitions` is `1`.
-  - **Flower:** due soon or due today, meaning `CurrentDate + 2 days >= LastReviewDate + IntervalDays`.
-  - **Wilted:** overdue, meaning `CurrentDate > LastReviewDate + IntervalDays`.
+### Creating a card
 
-## QualityScore (q)
-A single-event rating that shows how well the flashcard is known. It does not need to be stored.
+Place your cursor on any line containing `::`, then run the command **"Check line for :: item"** (via the command palette, or bind it to a hotkey).
 
-  - Range: `0` to `5`
-  - `5` = perfect recall
-  - `4` = correct, but with a little hesitation
-  - `3` = correct, but only after real effort
-  - `2` = wrong, but the answer felt familiar
-  - `1` = wrong, but you recognized the answer afterward
-  - `0` = complete blackout
+```
+Capital of France :: Paris
+```
 
-## EasinessFactor (EF)
-A measure of how easy the card is to remember. It varies from `1.3` to `5` and is computed using the SM-2 algorithm.
+- Everything before the first `::` becomes the card's front
+- Everything after becomes the back (additional `::` in the back text is preserved)
+- Empty front or back text is rejected with a notice, and no card is created
 
-Formula:
+### Opening the garden view
 
-`EF' = EF + (0.1 − (5 − q) × (0.08 + (5 − q) × 0.02))`
+Click the sun/snow icon in the ribbon to open the Garden of Memory view in the sidebar. It's organized into four sections, always shown in the same order:
 
-## NoOfRepetitions
-The number of times the `GardenCard` has been opened.
+| Stage | Meaning |
+|---|---|
+| 🌱 Seed | New, unreviewed cards |
+| 🌿 Pulp | Reviewed at least once, still early |
+| 🌹 Flower | Mature / well-retained cards |
+| 🥀 Wilt | Cards graded poorly on the last review |
 
-## IntervalDays
-How long until the card can be displayed again.
+Each section always renders, even if empty ("No cards here yet.").
 
-## SM Algorithm
-The algorithm that finds the next interval and the new easiness factor score.
+### Reviewing a card
 
-## Requirements
-Given a flashcard, it can be converted into a garden card.
+Click a card's button to open its front. Click **Show Back** to reveal the answer, then grade your recall:
 
-## MVP Scope
-Flashcard creation is not in scope for the project.
+| Grade | Meaning |
+|---|---|
+| Poor | Didn't recall it — resets progress, moves to Wilt |
+| Fair | Barely recalled |
+| Average | Recalled with some effort |
+| Good | Recalled comfortably |
+| Excellent | Recalled instantly |
 
-  - A given flashcard can be converted into a garden card.
+Grading updates the card's review interval, easiness factor, and next due date. Poor/Fair/Average/Good/Excellent below a "3" threshold resets the repetition streak; passing grades increase the interval and advance the card toward Flower.
 
-## Other Scopes / Add-ons
-Possible future features:
+**Exception — the four sample cards** included on first run (`ExampleSeededData`, `ExampleSproutedData`, `ExampleFlowerData`, `ExampleWiltedData`) are **locked**: grading them still updates their scheduling (interval, easiness factor, due date) but never moves them out of their starting stage. They're meant as a permanent visual reference for what each stage looks like, not real study material — delete their entries from `GardenOfMemory.json` if you don't want them.
 
-  - Flashcards can be created, edited, and deleted.
-  - Garden cards can be created, edited, and deleted.
+### Dashboard
 
-## Main Level Design
-1. User creates a flashcard.
-   - Flashcard is generated from a note or heading.
-   - Flashcard data is saved in the vault storage system.
+Below the four stage sections, a dashboard shows:
+- **Rate of Retention** — percentage of all cards currently in the Flower stage
+- **Cards due today** — cards whose due date has passed
+- **Total Cards** — count across all stages
+- A per-stage breakdown (Seed / Pulp / Flower / Wilt counts)
 
-2. Flashcard appears in the garden.
-   - Each flashcard is visualized as a plant.
-   - User can click the plant to review the flashcard.
+## Data storage
 
-3. Reviews are scheduled via spaced repetition.
-   - SM-2 algorithm computes the next review time.
-   - Schedule is updated after each review response.
+All cards are stored in a single JSON file at the root of your vault:
 
-4. Flashcards have visual states in the garden.
-   - Seed: new card.
-   - Sprout: reviewed once.
-   - Flower: due soon or due today.
-   - Wilted: overdue.
+```
+<your-vault>/GardenOfMemory.json
+```
 
-5. Progress data is tracked.
-   - Daily streak of completed reviews.
-   - Number of cards needing review today.
-   - Retention metrics.
+This is a flat array of `[id, cardData]` pairs (not Obsidian's usual per-plugin `data.json`), so it's visible in your file explorer and will sync via Obsidian Sync, git, or any other vault-sync method you use.
 
+On first launch (no existing `GardenOfMemory.json`), the plugin seeds itself with 4 sample cards, one per stage, so the view isn't empty. If the file is missing or unreadable for any reason, the plugin quietly falls back to seeding these samples rather than showing an error.
 
+Each card record looks like:
 
+```json
+{
+  "id": "3f9a1c22",
+  "front": "Capital of France",
+  "back": "Paris",
+  "state": 0,
+  "repetitionCount": 0,
+  "interval": 1,
+  "easinessFactor": 2.5,
+  "reviewedAt": 0,
+  "dueDate": 1755878400000,
+  "locked": false
+}
+```
 
+| Field | Meaning |
+|---|---|
+| `id` | Unique 8-digit numeric ID |
+| `front` / `back` | Card content |
+| `state` | 0 = Seed, 1 = Pulp, 2 = Flower, 3 = Wilt |
+| `repetitionCount` | Consecutive successful reviews |
+| `interval` | Days until next review |
+| `easinessFactor` | SM-2 easiness factor (min 1.3) |
+| `reviewedAt` | Timestamp of last review (0 if never reviewed) |
+| `dueDate` | Timestamp of next scheduled review |
+| `locked` | If `true`, grading never changes `state` (used by the 4 sample cards) |
 
-Upcoming Tasks  
+## Known limitations
 
-    DashboardView
-        Actions
-            Upload FlashCard File
-            Show a Garden Card in [ALL] states
-        Show
-            Stats
-    GardenCard View
-        Action
-            Show back 
-            Show Quality states
-        Show
-            GardenCard header
-            GardenCard Front
- 
-        
-    
+- Only one card can be created per command run (per `::` on the current line)
+- No built-in way to edit or delete a card from the UI — edit `GardenOfMemory.json` directly, or delete the file to reset to sample data
+- No settings tab yet for customizing colors, stage names, or the SM-2 thresholds
+- Card IDs are random 8-digit numbers with a collision check, not full UUIDs
 
+## Roadmap ideas
 
-
-    First 
-        User Input
-            User should upload a file
-                File should be in a specfic format or an error will occurN
-        GardenCard is created for each flashcard
-            Following Info is Set
-                NoOfRepetitions = 0
-                EasinessFactor = 2.5
-                LastReviewDate = "null"
-                IntervalDays = 1
-        GardenCard is saved in storge system
-    Second
-        Create a user dashboard
-            Following Functionalities
-                Uploading a flashcard file + process it [button]
-                Show the current state of the garden  
-                    seeds [button]
-                        Image of the seeds 
-                        Number of seeds
-                    sprouts [button]
-                        Image of the sprouts 
-                        Number of sprouts
-                    flowers [button]
-                        Image of the flowers 
-                        Number of flowers
-                    wilted [button]
-                        Image of the wilted 
-                        Number of wilted
-                Show the following stats
-                    Current user streak
-                    Cards due today 
-                    Retention Rate
-
-
-GardenManager
-    init()
-        readGardenCards()
-    readGardenCards()
-        Read Garden File()
-    getGardenCards()
-        {{seed, 20}, {wiltted, 10}, {'sprouted', 2}}
-    uploadFlashCardFile(filename)
-
-
-
-Task 1 
-    Convert Garden Cards values from yaml into python
-        Function getGardenCardValue (YAML file)
-            
-
-
-    
-
-    
+- In-view card editing and deletion
+- A settings tab (custom stage names/colors, review thresholds)
+- Bulk import of `::` cards from a whole note
+- Export/import of `GardenOfMemory.json` from the command palette

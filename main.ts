@@ -14,7 +14,6 @@ import {
 
 interface Card {
 	id: string,
-	name: string,
 	front: string,
 	back: string,
 	state: number,
@@ -23,29 +22,30 @@ interface Card {
 	easinessFactor: number,
 	reviewedAt: number,
 	dueDate: number,
+	locked?: boolean, // if true, grading never changes this card's category/state
 }
 
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-let cards = new Map<String, Card>();
+
+let cards = new Map<string, Card>();
 
 const GARDEN_OF_MEMORY_VIEW = "GARDEN_OF_MEMORY_VIEW";
 const GARDEN_OF_MEMORY_JSON = "GardenOfMemory.json"
 
-let CARD_ICONS = ["", "🌱", "🌿", "🌹", "🥀"];
 const CARD_STATES = ["Seed 🌱", "Pulp 🌿", "Flower 🌹", "Wilt 🥀"]
 const CARD_COLOR = [
-	"#67C7FF", // sky blue
-	"#FFB86B", // warm orange
-	"#FF6F91", // coral pink
-	"#A78BFA", // soft violet
+	"#67C7FF",
+	"#FFB86B",
+	"#FF6F91",
+	"#A78BFA",
 ];
 
 const CARD_COLOR2 = [
-	"#1E5F9E", // deep blue — pairs with sky blue
-	"#B85C16", // burnt orange — pairs with warm orange
-	"#B52D52", // deep rose — pairs with coral pink
-	"#5B3A9A", // deep indigo — pairs with soft violet
+	"#1E5F9E",
+	"#B85C16",
+	"#B52D52",
+	"#5B3A9A",
 ];
 
 export default class GardenOfMemoryPlugin extends Plugin {
@@ -58,6 +58,8 @@ export default class GardenOfMemoryPlugin extends Plugin {
 
 		await this.loadSettings();
 
+		this.statusBarElement = this.addStatusBarItem();
+
 		this.registerView(
 			GARDEN_OF_MEMORY_VIEW,
 			(leaf: WorkspaceLeaf) => new SquareView(leaf, this)
@@ -65,29 +67,31 @@ export default class GardenOfMemoryPlugin extends Plugin {
 
 
 		this.addRibbonIcon("sun-snow", "GardenOfMemory", () => {
-			console.log("addRibbonIcon, you!");
 			this.activateView();
 		});
 
 		this.addCommand({
 			id: "checkLineForDoubleColon",
 			name: "Check line for :: item",
-			editorCallback: (editor) => {
+			editorCallback: async (editor) => {
 				const cursor = editor.getCursor();
 				const lineText = editor.getLine(cursor.line);
 
 				if (lineText.includes("::")) {
-					let cardID = this.generateId();
+					const cardID = this.generateId();
 
-					let splitText = lineText.split("::");
-					let front = splitText[0];
-					let back = splitText[1];
+					const splitText = lineText.split("::");
 
-					console.log("lineText splitText, Front, back", lineText, splitText, front, back);
+					const front = splitText[0].trim();
+					const back = splitText.slice(1).join("::").trim();
 
-					cards.set(front, {
+					if (!front || !back) {
+						new Notice("GardenOfMemory: front or back is empty, skipping.");
+						return;
+					}
+
+					cards.set(cardID, {
 						id: cardID,
-						name: front,
 						front: front,
 						back: back,
 						state: 0,
@@ -97,17 +101,19 @@ export default class GardenOfMemoryPlugin extends Plugin {
 						reviewedAt: 0,
 						dueDate: Date.now() + ONE_DAY_MS,
 					});
-					this.saveSettings();
+
+					await this.saveSettings();
+					new Notice(`Card added: "${front}"`);
 
 					const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
-
-					for (const leaf of leaves) {
-						leaf.rebuildView();
+					if (leaves.length === 0) {
+						new Notice("Open the Garden of Memory view to see new cards.");
 					}
-
-					// 
+					for (const leaf of leaves) {
+						(leaf.view as SquareView).onOpen();
+					}
 				} else {
-					console.log("No :: found on this line");
+					new Notice("No :: found on this line");
 				}
 			},
 		});
@@ -120,12 +126,15 @@ export default class GardenOfMemoryPlugin extends Plugin {
 
 	generateId(length: number = 8): string {
 		const characters = "0123456789";
-		let result = "";
+		let result: string;
 
-		for (let i = 0; i < length; i++) {
-			const randomIndex = Math.floor(Math.random() * characters.length);
-			result += characters[randomIndex];
-		}
+		do {
+			result = "";
+			for (let i = 0; i < length; i++) {
+				const randomIndex = Math.floor(Math.random() * characters.length);
+				result += characters[randomIndex];
+			}
+		} while (cards.has(result)); // avoid silent overwrites from ID collisions
 
 		return result;
 	}
@@ -138,96 +147,94 @@ export default class GardenOfMemoryPlugin extends Plugin {
 			);
 			console.log("Write done", this.app.vault.adapter.getName());
 		} catch (e) {
-			console.log(e);
+			console.error("GardenOfMemory: failed to save data", e);
+			new Notice("GardenOfMemory: failed to save data — check console.");
 		}
 	}
 
 	async saveSampleData() {
+		const sampleData = new Map<string, Card>();
 
-		let sampleData = new Map<String, Card>();
-		sampleData.set("SeededData", {
-			"id": "1",
-			"name": "SeededData",
-			"front": "SeededDataFront",
-			"back": "SeededDataBack",
-			"state": 0,
-			"repetitionCount": 2,
-			"interval": 6,
-			"easinessFactor": 2.24,
-			"reviewedAt": 1,
-			"dueDate": 1
-		})
+		sampleData.set("1", {
+			id: "1",
+			front: "ExampleSeededData",
+			back: "Seed",
+			state: 0,
+			repetitionCount: 0,
+			interval: 1,
+			easinessFactor: 2.5,
+			reviewedAt: 0,
+			dueDate: Date.now(),
+			locked: true,
+		});
 
-		sampleData.set("SproutedData",
-			{
-				"id": "2",
-				"name": "SproutedData",
-				"front": "SproutedDataFront",
-				"back": "SproutedDataBack",
-				"state": 1,
-				"repetitionCount": 11,
-				"interval": 153069,
-				"easinessFactor": 3.600000000000001,
-				"reviewedAt": 1,
-				"dueDate": 1
-			})
+		sampleData.set("2", {
+			id: "2",
+			front: "ExampleSproutedData",
+			back: "Sprouted",
+			state: 1,
+			repetitionCount: 1,
+			interval: 1,
+			easinessFactor: 2.5,
+			reviewedAt: Date.now(),
+			dueDate: Date.now() + ONE_DAY_MS,
+			locked: true,
+		});
 
-		sampleData.set("FlowerData",
-			{
-				"id": "3",
-				"name": "FlowerData",
-				"front": "FlowerDataFront",
-				"back": "FlowerDataBack",
-				"state": 2,
-				"repetitionCount": 5,
-				"interval": 131,
-				"easinessFactor": 3.0000000000000004,
-				"reviewedAt": 1,
-				"dueDate": 1
-			})
+		sampleData.set("3", {
+			id: "3",
+			front: "ExampleFlowerData",
+			back: "Flower",
+			state: 2,
+			repetitionCount: 3,
+			interval: 6,
+			easinessFactor: 2.5,
+			reviewedAt: Date.now(),
+			dueDate: Date.now() + 6 * ONE_DAY_MS,
+			locked: true,
+		});
 
-		sampleData.set("WiltedData",
-			{
-				"id": "4",
-				"name": "WiltedData",
-				"front": "WiltedDataFront",
-				"back": "WiltedDataBack",
-				"state": 3,
-				"repetitionCount": 0,
-				"interval": 1,
-				"easinessFactor": 2.5,
-				"reviewedAt": 1,
-				"dueDate": 1
-			})
+		sampleData.set("4", {
+			id: "4",
+			front: "ExampleWiltedData",
+			back: "Wilted",
+			state: 3,
+			repetitionCount: 0,
+			interval: 1,
+			easinessFactor: 1.3,
+			reviewedAt: Date.now(),
+			dueDate: Date.now(),
+			locked: true,
+		});
 
+		// Populate in-memory state directly — don't rely on a disk round-trip
+		cards = sampleData;
 
 		try {
 			await this.app.vault.adapter.write(
 				GARDEN_OF_MEMORY_JSON,
-				JSON.stringify([...sampleData], null, 2)
+				JSON.stringify([...cards], null, 2)
 			);
-			console.log("Write done", this.app.vault.adapter.getName());
+			console.log("Sample data written", this.app.vault.adapter.getName());
 		} catch (e) {
-			console.log(e);
+			console.error("Failed to write sample data:", e);
+			new Notice("GardenOfMemory: failed to write sample data — check console.");
 		}
 	}
 
 	async loadSettings() {
 		try {
-			if (!(await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON))) {
-				await this.saveSampleData()
-			}
-
-			if (await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
-				const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
-				const data = JSON.parse(fileContent);
-
-				cards = new Map(data)
-				console.log("read", data, cards)
-
-			}
+			// Try to read the file directly. If it doesn't exist yet (first run),
+			// this throws — that's expected and handled below by seeding sample
+			// data, not shown to the user as an error.
+			const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
+			const data = JSON.parse(fileContent);
+			cards = new Map(data);
+			console.log("Loaded cards from disk", cards);
 		} catch (error) {
-			console.error("Could not load GARDEN_OF_MEMORY_JSON:", error);
+			// No existing data file (or it's unreadable) — seed sample data quietly.
+			console.log("No existing GardenOfMemory data found, seeding sample data.", error);
+			await this.saveSampleData();
 		}
 	}
 
@@ -239,7 +246,6 @@ export default class GardenOfMemoryPlugin extends Plugin {
 
 		if (leaves.length > 0) {
 			leaf = leaves[0];
-			console.log("HTML")
 		} else {
 			leaf = workspace.getRightLeaf(false);
 			await leaf?.setViewState({
@@ -248,21 +254,26 @@ export default class GardenOfMemoryPlugin extends Plugin {
 			});
 		}
 
-		workspace.revealLeaf(leaf);
+		if (leaf) {
+			workspace.revealLeaf(leaf);
+		}
 	}
 
 	sm2(card: Card, quality: number): Card {
 		if (quality < 3) {
 			card.repetitionCount = 0;
 			card.interval = 1;
+			if (!card.locked) card.state = 3;
 		} else {
 			if (card.repetitionCount === 0) {
 				card.interval = 1;
+				if (!card.locked) card.state = 1;
 			} else if (card.repetitionCount === 1) {
 				card.interval = 6;
-				card.state = 1;
+				if (!card.locked) card.state = 2;
 			} else {
 				card.interval = Math.round(card.interval * card.easinessFactor);
+				if (!card.locked) card.state = 2;
 			}
 			card.repetitionCount += 1;
 		}
@@ -276,15 +287,9 @@ export default class GardenOfMemoryPlugin extends Plugin {
 			card.easinessFactor = 1.3;
 		}
 
-		if (card.easinessFactor > 3.5) {
-			card.state = 3;
-		}
-
 		card.reviewedAt = Date.now();
 		card.dueDate = card.reviewedAt + card.interval * ONE_DAY_MS;
-		if (card.dueDate <= Date.now()) {
-			card.state = 4;
-		}
+
 		return card;
 	}
 }
@@ -305,34 +310,35 @@ export class SquareView extends ItemView {
 	}
 
 	async onOpen() {
-		console.log("HTML")
+		// NOTE: intentionally does NOT reload from disk here.
+		// `cards` is the live in-memory source of truth for the whole session;
+		// reassigning it mid-session breaks any stale button closures.
 		const container = this.contentEl;
 		container.empty();
 
-		const stateCards = new Map<number, String[]>();
+		const stateCards = new Map<number, string[]>();
 		let dueToday = 0
 
-		for (const cardName of cards.keys()) {
-			const card: Card = cards.get(cardName);
+		for (const cardId of cards.keys()) {
+			const card = cards.get(cardId);
+			if (!card) continue;
 
 			const cardsInState = stateCards.get(card.state) ?? [];
-			cardsInState.push(card.name);
+			cardsInState.push(card.id);
+
 			stateCards.set(card.state, cardsInState);
-			if (Math.abs(Date.now() - card.dueDate) < ONE_DAY_MS) {
+
+			if (card.dueDate <= Date.now()) {
 				dueToday = dueToday + 1
 			}
 		}
-		console.log("stateCards", stateCards)
 
 		container.createEl("h1", { text: "Garden Of Memory" });
+		container.createEl("h5", { text: "To add a flashcard use the `::` parameter, Ex: apple :: red color fruit" });
 
 
-
-
-
-
-		for (const state of stateCards.keys()) {
-			const cardsInState = stateCards.get(state);
+		for (let state = 0; state < CARD_STATES.length; state++) {
+			const idsInState = stateCards.get(state) ?? [];
 
 			const section = container.createEl("section");
 			section.style.backgroundColor = CARD_COLOR[state]
@@ -340,34 +346,35 @@ export class SquareView extends ItemView {
 			section.style.padding = "16px";
 			section.style.borderRadius = "8px";
 			section.style.margin = "12px";
-			//section.style.height = "900px";
 
 			const title = section.createEl("h1", { text: CARD_STATES[state] });
 			title.style.color = "#000000ff";
 
-			for (const id of stateCards.get(state)) {
-				console.log(id, cards.get(id))
-				let front = cards.get(id)?.front;
+			if (idsInState.length === 0) {
+				section.createEl("p", { text: "No cards here yet." });
+			}
+
+			for (const id of idsInState) {
+				const front = cards.get(id)?.front ?? "";
 				const reviewButton = section.createEl("button", { text: front });
 				reviewButton.style.backgroundColor = CARD_COLOR2[state]
-				// reviewButton.style.color = "#000000ff";
 
 				reviewButton.style.padding = "16px";
 				reviewButton.style.borderRadius = "8px";
 				reviewButton.style.margin = "12px";
 
 				reviewButton.addEventListener("click", async () => {
-					console.log(`Reviewing ${id}`);
+					const cardData = cards.get(id);
+					if (!cardData) {
+						new Notice("Card not found.");
+						return;
+					}
 
-					// Run your review logic here:
-					console.log("modal", cards.get(id));
-					new CardFrontModal(this.app, this.plugin, cards.get(id), (result) => {
-						new Notice(`Hello, ${cards.get(id).back}!`);
+					new CardFrontModal(this.app, this.plugin, cardData, (result) => {
+						new Notice(`Graded: ${result}`);
 						this.onOpen();
 					}).open();
 				});
-
-				console.log("Add button");
 			}
 		}
 
@@ -382,19 +389,20 @@ export class SquareView extends ItemView {
 		const title = stats.createEl("h2", { text: "Dashboard" });
 		title.style.color = "#010003ff";
 
-		let ret = Number(stateCards.get(3)?.length) / Number(cards.size) * 100
+		const matureCount = stateCards.get(2)?.length ?? 0;
+		const totalCount = cards.size;
+		const ret = totalCount > 0 ? (matureCount / totalCount) * 100 : 0;
 
-		stats.createEl("h3", { text: "Rate of Retention : " + ret })
+		stats.createEl("h3", { text: "Rate of Retention : " + ret.toFixed(1) + "%" })
 		stats.createEl("h3", { text: "Cards due today 	: " + dueToday })
 		stats.createEl("h3", { text: "Total Cards 			: " + cards.size })
-		stats.createEl("h6", { text: "	No of Seed [🌱] Cards   : " + stateCards.get(0)?.length })
-		stats.createEl("h6", { text: "	No of Fern [🌿] Cards   : " + stateCards.get(1)?.length })
-		stats.createEl("h6", { text: "	No of Flower [🌹] Cards : " + stateCards.get(2)?.length })
-		stats.createEl("h6", { text: "	No of Wilter [🥀] Cards : " + stateCards.get(3)?.length })
+		stats.createEl("h6", { text: "	No of Seed [🌱] Cards   : " + (stateCards.get(0)?.length ?? 0) })
+		stats.createEl("h6", { text: "	No of Fern [🌿] Cards   : " + (stateCards.get(1)?.length ?? 0) })
+		stats.createEl("h6", { text: "	No of Flower [🌹] Cards : " + (stateCards.get(2)?.length ?? 0) })
+		stats.createEl("h6", { text: "	No of Wilter [🥀] Cards : " + (stateCards.get(3)?.length ?? 0) })
 	}
 
 	async onClose() {
-		// save
 	}
 }
 
@@ -423,17 +431,9 @@ class CardFrontModal extends Modal {
 		reviewButton.style.margin = "12px";
 
 		reviewButton.addEventListener("click", async () => {
-			new CardBackModal(app, plugin, card, (result) => {
-				new Notice(`Hello, ${card.back}!`);
-			}).open();
+			new CardBackModal(app, plugin, card, onSubmit).open();
 			this.close()
 		});
-
-		// const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
-
-		// for (const leaf of leaves) {
-		// 	leaf.rebuildView();
-		// }
 	}
 }
 
@@ -441,7 +441,7 @@ class CardBackModal extends Modal {
 	constructor(app: App, plugin: GardenOfMemoryPlugin, card: Card, onSubmit: (result: string) => void) {
 		super(app);
 
-		let buttons = {
+		const buttons: Record<string, number> = {
 			Poor: 1,
 			Fair: 2,
 			Average: 3,
@@ -471,18 +471,16 @@ class CardBackModal extends Modal {
 
 			reviewButton.addEventListener("click", async () => {
 				plugin.sm2(card, value)
-				plugin.saveSettings();
-				console.log("Button Card clicked: ", name, value, card)
+				await plugin.saveSettings();
+
+				const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
+				for (const leaf of leaves) {
+					(leaf.view as SquareView).onOpen();
+				}
+
+				onSubmit(name);
 				this.close()
 			});
 		}
-
-		const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
-
-		for (const leaf of leaves) {
-			leaf.rebuildView();
-		}
-
-
 	}
 }

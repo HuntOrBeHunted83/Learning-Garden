@@ -51,29 +51,31 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
   async onload() {
     console.log("GardenOfMemory loading...");
     await this.loadSettings();
+    this.statusBarElement = this.addStatusBarItem();
     this.registerView(
       GARDEN_OF_MEMORY_VIEW,
       (leaf) => new SquareView(leaf, this)
     );
     this.addRibbonIcon("sun-snow", "GardenOfMemory", () => {
-      console.log("addRibbonIcon, you!");
       this.activateView();
     });
     this.addCommand({
       id: "checkLineForDoubleColon",
       name: "Check line for :: item",
-      editorCallback: (editor) => {
+      editorCallback: async (editor) => {
         const cursor = editor.getCursor();
         const lineText = editor.getLine(cursor.line);
         if (lineText.includes("::")) {
-          let cardID = this.generateId();
-          let splitText = lineText.split("::");
-          let front = splitText[0];
-          let back = splitText[1];
-          console.log("lineText splitText, Front, back", lineText, splitText, front, back);
-          cards.set(front, {
+          const cardID = this.generateId();
+          const splitText = lineText.split("::");
+          const front = splitText[0].trim();
+          const back = splitText.slice(1).join("::").trim();
+          if (!front || !back) {
+            new import_obsidian.Notice("GardenOfMemory: front or back is empty, skipping.");
+            return;
+          }
+          cards.set(cardID, {
             id: cardID,
-            name: front,
             front,
             back,
             state: 0,
@@ -83,13 +85,17 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
             reviewedAt: 0,
             dueDate: Date.now() + ONE_DAY_MS
           });
-          this.saveSettings();
+          await this.saveSettings();
+          new import_obsidian.Notice(`Card added: "${front}"`);
           const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
+          if (leaves.length === 0) {
+            new import_obsidian.Notice("Open the Garden of Memory view to see new cards.");
+          }
           for (const leaf of leaves) {
-            leaf.rebuildView();
+            leaf.view.onOpen();
           }
         } else {
-          console.log("No :: found on this line");
+          new import_obsidian.Notice("No :: found on this line");
         }
       }
     });
@@ -100,11 +106,14 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
   }
   generateId(length = 8) {
     const characters = "0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      const randomIndex = Math.floor(Math.random() * characters.length);
-      result += characters[randomIndex];
-    }
+    let result;
+    do {
+      result = "";
+      for (let i = 0; i < length; i++) {
+        const randomIndex = Math.floor(Math.random() * characters.length);
+        result += characters[randomIndex];
+      }
+    } while (cards.has(result));
     return result;
   }
   async saveSettings() {
@@ -115,91 +124,81 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
       );
       console.log("Write done", this.app.vault.adapter.getName());
     } catch (e) {
-      console.log(e);
+      console.error("GardenOfMemory: failed to save data", e);
+      new import_obsidian.Notice("GardenOfMemory: failed to save data \u2014 check console.");
     }
   }
   async saveSampleData() {
-    let sampleData = /* @__PURE__ */ new Map();
-    sampleData.set("SeededData", {
-      "id": "1",
-      "name": "SeededData",
-      "front": "SeededDataFront",
-      "back": "SeededDataBack",
-      "state": 0,
-      "repetitionCount": 2,
-      "interval": 6,
-      "easinessFactor": 2.24,
-      "reviewedAt": 1,
-      "dueDate": 1
+    const sampleData = /* @__PURE__ */ new Map();
+    sampleData.set("1", {
+      id: "1",
+      front: "ExampleSeededData",
+      back: "Seed",
+      state: 0,
+      repetitionCount: 0,
+      interval: 1,
+      easinessFactor: 2.5,
+      reviewedAt: 0,
+      dueDate: Date.now(),
+      locked: true
     });
-    sampleData.set(
-      "SproutedData",
-      {
-        "id": "2",
-        "name": "SproutedData",
-        "front": "SproutedDataFront",
-        "back": "SproutedDataBack",
-        "state": 1,
-        "repetitionCount": 11,
-        "interval": 153069,
-        "easinessFactor": 3.600000000000001,
-        "reviewedAt": 1,
-        "dueDate": 1
-      }
-    );
-    sampleData.set(
-      "FlowerData",
-      {
-        "id": "3",
-        "name": "FlowerData",
-        "front": "FlowerDataFront",
-        "back": "FlowerDataBack",
-        "state": 2,
-        "repetitionCount": 5,
-        "interval": 131,
-        "easinessFactor": 3.0000000000000004,
-        "reviewedAt": 1,
-        "dueDate": 1
-      }
-    );
-    sampleData.set(
-      "WiltedData",
-      {
-        "id": "4",
-        "name": "WiltedData",
-        "front": "WiltedDataFront",
-        "back": "WiltedDataBack",
-        "state": 3,
-        "repetitionCount": 0,
-        "interval": 1,
-        "easinessFactor": 2.5,
-        "reviewedAt": 1,
-        "dueDate": 1
-      }
-    );
+    sampleData.set("2", {
+      id: "2",
+      front: "ExampleSproutedData",
+      back: "Sprouted",
+      state: 1,
+      repetitionCount: 1,
+      interval: 1,
+      easinessFactor: 2.5,
+      reviewedAt: Date.now(),
+      dueDate: Date.now() + ONE_DAY_MS,
+      locked: true
+    });
+    sampleData.set("3", {
+      id: "3",
+      front: "ExampleFlowerData",
+      back: "Flower",
+      state: 2,
+      repetitionCount: 3,
+      interval: 6,
+      easinessFactor: 2.5,
+      reviewedAt: Date.now(),
+      dueDate: Date.now() + 6 * ONE_DAY_MS,
+      locked: true
+    });
+    sampleData.set("4", {
+      id: "4",
+      front: "ExampleWiltedData",
+      back: "Wilted",
+      state: 3,
+      repetitionCount: 0,
+      interval: 1,
+      easinessFactor: 1.3,
+      reviewedAt: Date.now(),
+      dueDate: Date.now(),
+      locked: true
+    });
+    cards = sampleData;
     try {
       await this.app.vault.adapter.write(
         GARDEN_OF_MEMORY_JSON,
-        JSON.stringify([...sampleData], null, 2)
+        JSON.stringify([...cards], null, 2)
       );
-      console.log("Write done", this.app.vault.adapter.getName());
+      console.log("Sample data written", this.app.vault.adapter.getName());
     } catch (e) {
-      console.log(e);
+      console.error("Failed to write sample data:", e);
+      new import_obsidian.Notice("GardenOfMemory: failed to write sample data \u2014 check console.");
     }
   }
   async loadSettings() {
     try {
-      if (!await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
-        await this.saveSampleData();
-      }
-      if (await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
-        const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
-        const data = JSON.parse(fileContent);
-        cards = new Map(data);
-        console.log("read", data, cards);
-      }
+      const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
+      const data = JSON.parse(fileContent);
+      cards = new Map(data);
+      console.log("Loaded cards from disk", cards);
     } catch (error) {
-      console.error("Could not load GARDEN_OF_MEMORY_JSON:", error);
+      console.log("No existing GardenOfMemory data found, seeding sample data.", error);
+      await this.saveSampleData();
     }
   }
   async activateView() {
@@ -208,7 +207,6 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
     const leaves = workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
     if (leaves.length > 0) {
       leaf = leaves[0];
-      console.log("HTML");
     } else {
       leaf = workspace.getRightLeaf(false);
       await leaf?.setViewState({
@@ -216,20 +214,29 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
         active: true
       });
     }
-    workspace.revealLeaf(leaf);
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
   }
   sm2(card, quality) {
     if (quality < 3) {
       card.repetitionCount = 0;
       card.interval = 1;
+      if (!card.locked)
+        card.state = 3;
     } else {
       if (card.repetitionCount === 0) {
         card.interval = 1;
+        if (!card.locked)
+          card.state = 1;
       } else if (card.repetitionCount === 1) {
         card.interval = 6;
-        card.state = 1;
+        if (!card.locked)
+          card.state = 2;
       } else {
         card.interval = Math.round(card.interval * card.easinessFactor);
+        if (!card.locked)
+          card.state = 2;
       }
       card.repetitionCount += 1;
     }
@@ -237,14 +244,8 @@ var GardenOfMemoryPlugin = class extends import_obsidian.Plugin {
     if (card.easinessFactor < 1.3) {
       card.easinessFactor = 1.3;
     }
-    if (card.easinessFactor > 3.5) {
-      card.state = 3;
-    }
     card.reviewedAt = Date.now();
     card.dueDate = card.reviewedAt + card.interval * ONE_DAY_MS;
-    if (card.dueDate <= Date.now()) {
-      card.state = 4;
-    }
     return card;
   }
 };
@@ -260,24 +261,25 @@ var SquareView = class extends import_obsidian.ItemView {
     return "Square view";
   }
   async onOpen() {
-    console.log("HTML");
     const container = this.contentEl;
     container.empty();
     const stateCards = /* @__PURE__ */ new Map();
     let dueToday = 0;
-    for (const cardName of cards.keys()) {
-      const card = cards.get(cardName);
+    for (const cardId of cards.keys()) {
+      const card = cards.get(cardId);
+      if (!card)
+        continue;
       const cardsInState = stateCards.get(card.state) ?? [];
-      cardsInState.push(card.name);
+      cardsInState.push(card.id);
       stateCards.set(card.state, cardsInState);
-      if (Math.abs(Date.now() - card.dueDate) < ONE_DAY_MS) {
+      if (card.dueDate <= Date.now()) {
         dueToday = dueToday + 1;
       }
     }
-    console.log("stateCards", stateCards);
     container.createEl("h1", { text: "Garden Of Memory" });
-    for (const state of stateCards.keys()) {
-      const cardsInState = stateCards.get(state);
+    container.createEl("h5", { text: "To add a flashcard use the `::` parameter, Ex: apple :: red color fruit" });
+    for (let state = 0; state < CARD_STATES.length; state++) {
+      const idsInState = stateCards.get(state) ?? [];
       const section = container.createEl("section");
       section.style.backgroundColor = CARD_COLOR[state];
       section.style.color = "white";
@@ -286,23 +288,27 @@ var SquareView = class extends import_obsidian.ItemView {
       section.style.margin = "12px";
       const title2 = section.createEl("h1", { text: CARD_STATES[state] });
       title2.style.color = "#000000ff";
-      for (const id of stateCards.get(state)) {
-        console.log(id, cards.get(id));
-        let front = cards.get(id)?.front;
+      if (idsInState.length === 0) {
+        section.createEl("p", { text: "No cards here yet." });
+      }
+      for (const id of idsInState) {
+        const front = cards.get(id)?.front ?? "";
         const reviewButton = section.createEl("button", { text: front });
         reviewButton.style.backgroundColor = CARD_COLOR2[state];
         reviewButton.style.padding = "16px";
         reviewButton.style.borderRadius = "8px";
         reviewButton.style.margin = "12px";
         reviewButton.addEventListener("click", async () => {
-          console.log(`Reviewing ${id}`);
-          console.log("modal", cards.get(id));
-          new CardFrontModal(this.app, this.plugin, cards.get(id), (result) => {
-            new import_obsidian.Notice(`Hello, ${cards.get(id).back}!`);
+          const cardData = cards.get(id);
+          if (!cardData) {
+            new import_obsidian.Notice("Card not found.");
+            return;
+          }
+          new CardFrontModal(this.app, this.plugin, cardData, (result) => {
+            new import_obsidian.Notice(`Graded: ${result}`);
             this.onOpen();
           }).open();
         });
-        console.log("Add button");
       }
     }
     const stats = container.createEl("section");
@@ -313,14 +319,16 @@ var SquareView = class extends import_obsidian.ItemView {
     stats.style.margin = "12px";
     const title = stats.createEl("h2", { text: "Dashboard" });
     title.style.color = "#010003ff";
-    let ret = Number(stateCards.get(3)?.length) / Number(cards.size) * 100;
-    stats.createEl("h3", { text: "Rate of Retention : " + ret });
+    const matureCount = stateCards.get(2)?.length ?? 0;
+    const totalCount = cards.size;
+    const ret = totalCount > 0 ? matureCount / totalCount * 100 : 0;
+    stats.createEl("h3", { text: "Rate of Retention : " + ret.toFixed(1) + "%" });
     stats.createEl("h3", { text: "Cards due today 	: " + dueToday });
     stats.createEl("h3", { text: "Total Cards 			: " + cards.size });
-    stats.createEl("h6", { text: "	No of Seed [\u{1F331}] Cards   : " + stateCards.get(0)?.length });
-    stats.createEl("h6", { text: "	No of Fern [\u{1F33F}] Cards   : " + stateCards.get(1)?.length });
-    stats.createEl("h6", { text: "	No of Flower [\u{1F339}] Cards : " + stateCards.get(2)?.length });
-    stats.createEl("h6", { text: "	No of Wilter [\u{1F940}] Cards : " + stateCards.get(3)?.length });
+    stats.createEl("h6", { text: "	No of Seed [\u{1F331}] Cards   : " + (stateCards.get(0)?.length ?? 0) });
+    stats.createEl("h6", { text: "	No of Fern [\u{1F33F}] Cards   : " + (stateCards.get(1)?.length ?? 0) });
+    stats.createEl("h6", { text: "	No of Flower [\u{1F339}] Cards : " + (stateCards.get(2)?.length ?? 0) });
+    stats.createEl("h6", { text: "	No of Wilter [\u{1F940}] Cards : " + (stateCards.get(3)?.length ?? 0) });
   }
   async onClose() {
   }
@@ -341,9 +349,7 @@ var CardFrontModal = class extends import_obsidian.Modal {
     reviewButton.style.borderRadius = "8px";
     reviewButton.style.margin = "12px";
     reviewButton.addEventListener("click", async () => {
-      new CardBackModal(app, plugin, card, (result) => {
-        new import_obsidian.Notice(`Hello, ${card.back}!`);
-      }).open();
+      new CardBackModal(app, plugin, card, onSubmit).open();
       this.close();
     });
   }
@@ -351,7 +357,7 @@ var CardFrontModal = class extends import_obsidian.Modal {
 var CardBackModal = class extends import_obsidian.Modal {
   constructor(app, plugin, card, onSubmit) {
     super(app);
-    let buttons = {
+    const buttons = {
       Poor: 1,
       Fair: 2,
       Average: 3,
@@ -373,14 +379,14 @@ var CardBackModal = class extends import_obsidian.Modal {
       reviewButton.style.margin = "12px";
       reviewButton.addEventListener("click", async () => {
         plugin.sm2(card, value);
-        plugin.saveSettings();
-        console.log("Button Card clicked: ", name, value, card);
+        await plugin.saveSettings();
+        const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
+        for (const leaf of leaves) {
+          leaf.view.onOpen();
+        }
+        onSubmit(name);
         this.close();
       });
-    }
-    const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
-    for (const leaf of leaves) {
-      leaf.rebuildView();
     }
   }
 };

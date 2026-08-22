@@ -1,10 +1,10 @@
 {
-    "id": "garden",
-    "name": "garden",
-    "version": "0.0.1",
+    "id": "GardenOfGrowth",
+    "name": "Garden Of Growth",
+    "version": "1.0.0",
     "miniApiVersion": "0.15.0",
     "description": "Turn notes into flashcards and watch them in a interactive, visual garden leaf view.",
-    "author": "xapqrt",
-    "authorUrl": "https://github.com/xapqrt",
-    "isDesktopOnly": false
+    "author": "Ishank R",
+    "authorUrl": "https://github.com/HuntOrBeHunted83",
+    "isDesktopOnly": true
 }
