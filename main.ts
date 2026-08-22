@@ -32,9 +32,26 @@ let cards = new Map<String, Card>();
 const GARDEN_OF_MEMORY_VIEW = "GARDEN_OF_MEMORY_VIEW";
 const GARDEN_OF_MEMORY_JSON = "GardenOfMemory.json"
 
+let CARD_ICONS = ["", "🌱", "🌿", "🌹", "🥀"];
+const CARD_STATES = ["Seed 🌱", "Pulp 🌿", "Flower 🌹", "Wilt 🥀"]
+const CARD_COLOR = [
+	"#67C7FF", // sky blue
+	"#FFB86B", // warm orange
+	"#FF6F91", // coral pink
+	"#A78BFA", // soft violet
+];
+
+const CARD_COLOR2 = [
+	"#1E5F9E", // deep blue — pairs with sky blue
+	"#B85C16", // burnt orange — pairs with warm orange
+	"#B52D52", // deep rose — pairs with coral pink
+	"#5B3A9A", // deep indigo — pairs with soft violet
+];
+
 export default class GardenOfMemoryPlugin extends Plugin {
 
 	statusBarElement!: HTMLSpanElement;
+
 
 	async onload() {
 		console.log("GardenOfMemory loading...");
@@ -97,6 +114,7 @@ export default class GardenOfMemoryPlugin extends Plugin {
 	}
 
 	onunload() {
+		console.log("GardenOfMemory unloading...");
 		this.statusBarElement.remove();
 	}
 
@@ -118,8 +136,76 @@ export default class GardenOfMemoryPlugin extends Plugin {
 				GARDEN_OF_MEMORY_JSON,
 				JSON.stringify([...cards], null, 2)
 			);
+			console.log("Write done", this.app.vault.adapter.getName());
+		} catch (e) {
+			console.log(e);
+		}
+	}
+
+	async saveSampleData() {
+
+		let sampleData = new Map<String, Card>();
+		sampleData.set("SeededData", {
+			"id": "1",
+			"name": "SeededData",
+			"front": "SeededDataFront",
+			"back": "SeededDataBack",
+			"state": 0,
+			"repetitionCount": 2,
+			"interval": 6,
+			"easinessFactor": 2.24,
+			"reviewedAt": 1,
+			"dueDate": 1
+		})
+
+		sampleData.set("SproutedData",
+			{
+				"id": "2",
+				"name": "SproutedData",
+				"front": "SproutedDataFront",
+				"back": "SproutedDataBack",
+				"state": 1,
+				"repetitionCount": 11,
+				"interval": 153069,
+				"easinessFactor": 3.600000000000001,
+				"reviewedAt": 1,
+				"dueDate": 1
+			})
+
+		sampleData.set("FlowerData",
+			{
+				"id": "3",
+				"name": "FlowerData",
+				"front": "FlowerDataFront",
+				"back": "FlowerDataBack",
+				"state": 2,
+				"repetitionCount": 5,
+				"interval": 131,
+				"easinessFactor": 3.0000000000000004,
+				"reviewedAt": 1,
+				"dueDate": 1
+			})
+
+		sampleData.set("WiltedData",
+			{
+				"id": "4",
+				"name": "WiltedData",
+				"front": "WiltedDataFront",
+				"back": "WiltedDataBack",
+				"state": 3,
+				"repetitionCount": 0,
+				"interval": 1,
+				"easinessFactor": 2.5,
+				"reviewedAt": 1,
+				"dueDate": 1
+			})
 
 
+		try {
+			await this.app.vault.adapter.write(
+				GARDEN_OF_MEMORY_JSON,
+				JSON.stringify([...sampleData], null, 2)
+			);
 			console.log("Write done", this.app.vault.adapter.getName());
 		} catch (e) {
 			console.log(e);
@@ -128,6 +214,10 @@ export default class GardenOfMemoryPlugin extends Plugin {
 
 	async loadSettings() {
 		try {
+			if (!(await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON))) {
+				await this.saveSampleData()
+			}
+
 			if (await this.app.vault.adapter.exists(GARDEN_OF_MEMORY_JSON)) {
 				const fileContent = await this.app.vault.adapter.read(GARDEN_OF_MEMORY_JSON);
 				const data = JSON.parse(fileContent);
@@ -236,40 +326,30 @@ export class SquareView extends ItemView {
 
 		container.createEl("h1", { text: "Garden Of Memory" });
 
-		const header = ["Seed 🌱", "Pulp 🌿", "Flower 🌹", "Wilt 🥀"]
-		const color = [
-			"#67C7FF", // sky blue
-			"#FFB86B", // warm orange
-			"#FF6F91", // coral pink
-			"#A78BFA", // soft violet
-		];
 
-		const colors = [
-			"#1E5F9E", // deep blue — pairs with sky blue
-			"#B85C16", // burnt orange — pairs with warm orange
-			"#B52D52", // deep rose — pairs with coral pink
-			"#5B3A9A", // deep indigo — pairs with soft violet
-		];
+
+
+
 
 		for (const state of stateCards.keys()) {
 			const cardsInState = stateCards.get(state);
 
 			const section = container.createEl("section");
-			section.style.backgroundColor = color[state]
+			section.style.backgroundColor = CARD_COLOR[state]
 			section.style.color = "white";
 			section.style.padding = "16px";
 			section.style.borderRadius = "8px";
 			section.style.margin = "12px";
 			//section.style.height = "900px";
 
-			const title = section.createEl("h1", { text: header[state] });
+			const title = section.createEl("h1", { text: CARD_STATES[state] });
 			title.style.color = "#000000ff";
 
 			for (const id of stateCards.get(state)) {
 				console.log(id, cards.get(id))
 				let front = cards.get(id)?.front;
 				const reviewButton = section.createEl("button", { text: front });
-				reviewButton.style.backgroundColor = colors[state]
+				reviewButton.style.backgroundColor = CARD_COLOR2[state]
 				// reviewButton.style.color = "#000000ff";
 
 				reviewButton.style.padding = "16px";
@@ -281,7 +361,7 @@ export class SquareView extends ItemView {
 
 					// Run your review logic here:
 					console.log("modal", cards.get(id));
-					new ExampleModal(this.app, this.plugin, cards.get(id), (result) => {
+					new CardFrontModal(this.app, this.plugin, cards.get(id), (result) => {
 						new Notice(`Hello, ${cards.get(id).back}!`);
 						this.onOpen();
 					}).open();
@@ -320,92 +400,89 @@ export class SquareView extends ItemView {
 
 
 
-class ExampleModal extends Modal {
+class CardFrontModal extends Modal {
 	constructor(app: App, plugin: GardenOfMemoryPlugin, card: Card, onSubmit: (result: string) => void) {
 		super(app);
 
-		let icons = ["", "🌱", "🌿", "🌹", "🥀"];
-		this.setTitle(icons[card.state]);
 
-		new Setting(this.contentEl)
-			.setName("Flash Card Front " + card.front);
+		this.setTitle(CARD_STATES[card.state] + " card - Front data");
 
-		const backText = this.contentEl.createEl("p", {
-			text: "Flash Card Back " + card.back,
+		const container = this.contentEl;
+		container.empty();
+
+		const section = container.createEl("section");
+		section.style.backgroundColor = CARD_COLOR[card.state]
+
+		const title = section.createEl("h1", { text: card.front });
+		title.style.color = "#000000ff";
+
+		const reviewButton = section.createEl("button", { text: "Show Back" });
+		reviewButton.style.backgroundColor = CARD_COLOR2[card.state]
+		reviewButton.style.padding = "16px";
+		reviewButton.style.borderRadius = "8px";
+		reviewButton.style.margin = "12px";
+
+		reviewButton.addEventListener("click", async () => {
+			new CardBackModal(app, plugin, card, (result) => {
+				new Notice(`Hello, ${card.back}!`);
+			}).open();
+			this.close()
 		});
 
-		backText.style.display = "none";
+		// const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
 
-		let secondButtonsCreated = false;
-
-		const backSetting = new Setting(this.contentEl);
-
-		backSetting.addButton((back) =>
-			back
-				.setButtonText("Show Back")
-				.onClick(() => {
-					backText.style.display = "block";
-
-					backSetting.settingEl.remove();
-
-					if (!secondButtonsCreated) {
-						secondButtonsCreated = true;
-
-						new Setting(this.contentEl)
-							.addButton((Poor) =>
-								Poor.setButtonText("1 Poor").onClick(() => {
-									console.log("1 clicked");
-									plugin.sm2(card, 1)
-									plugin.saveSettings();
-									console.log("CARD UPDATE: ", card)
-									this.close()
-								})
-							)
-							.addButton((Fair) =>
-								Fair.setButtonText("2 Fair").onClick(() => {
-									console.log("2 clicked");
-									plugin.sm2(card, 2)
-									plugin.saveSettings();
-									console.log("CARD UPDATE: ", card)
-									this.close()
-								})
-							)
-							.addButton((Average) =>
-								Average.setButtonText("3 Average").onClick(() => {
-									console.log("3 clicked");
-									plugin.sm2(card, 3)
-									plugin.saveSettings();
-									console.log("CARD UPDATE: ", card)
-									this.close()
-								})
-							)
-							.addButton((Good) =>
-								Good.setButtonText("4 Good").onClick(() => {
-									console.log("4 clicked");
-									plugin.sm2(card, 4)
-									plugin.saveSettings();
-									console.log("CARD UPDATE: ", card)
-									this.close()
-								})
-							)
-							.addButton((Excellent) =>
-								Excellent.setButtonText("5 Excellent").onClick(() => {
-									console.log("3 clicked");
-									plugin.sm2(card, 5)
-									plugin.saveSettings();
-
-									const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
-
-									for (const leaf of leaves) {
-										leaf.rebuildView();
-									}
-									console.log("CARD UPDATE: ", card)
-									this.close()
-								})
-							);
-					}
-				})
-		);
+		// for (const leaf of leaves) {
+		// 	leaf.rebuildView();
+		// }
 	}
 }
 
+class CardBackModal extends Modal {
+	constructor(app: App, plugin: GardenOfMemoryPlugin, card: Card, onSubmit: (result: string) => void) {
+		super(app);
+
+		let buttons = {
+			Poor: 1,
+			Fair: 2,
+			Average: 3,
+			Good: 4,
+			Excellent: 5,
+		}
+
+		this.setTitle(CARD_STATES[card.state] + " card - Back data");
+
+		const container = this.contentEl;
+		container.empty();
+
+		const section = container.createEl("section");
+		section.style.backgroundColor = CARD_COLOR[card.state]
+
+		const title = section.createEl("h1", { text: card.back });
+		title.style.color = "#000000ff";
+
+
+		for (const [name, value] of Object.entries(buttons)) {
+
+			const reviewButton = section.createEl("button", { text: name });
+			reviewButton.style.backgroundColor = CARD_COLOR2[card.state]
+			reviewButton.style.padding = "16px";
+			reviewButton.style.borderRadius = "8px";
+			reviewButton.style.margin = "12px";
+
+			reviewButton.addEventListener("click", async () => {
+				plugin.sm2(card, value)
+				plugin.saveSettings();
+				console.log("Button Card clicked: ", name, value, card)
+				this.close()
+			});
+		}
+
+		const leaves = this.app.workspace.getLeavesOfType(GARDEN_OF_MEMORY_VIEW);
+
+		for (const leaf of leaves) {
+			leaf.rebuildView();
+		}
+
+
+	}
+}

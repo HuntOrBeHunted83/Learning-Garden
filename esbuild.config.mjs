@@ -9,9 +9,56 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
+
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectDir = path.dirname(fileURLToPath(import.meta.url));
+
+const vaultPath = process.env.OBSIDIAN_VAULT;
+const pluginId = "my-plugin";
+
+if (!vaultPath) {
+    throw new Error("OBSIDIAN_VAULT is not set");
+}
+
+const pluginDir = path.join(
+    vaultPath
+);
+
+const copyAssets = {
+    name: "copy-assets",
+
+    setup(build) {
+        build.onEnd((result) => {
+            if (result.errors.length > 0) return;
+
+            const source = path.join(
+                projectDir,
+                "gardenOfGrowth.json"
+            );
+
+            const destination = path.join(
+                pluginDir,
+                "gardenOfGrowth.json"
+            );
+
+            fs.mkdirSync(path.dirname(destination), {
+                recursive: true,
+            });
+
+            fs.copyFileSync(source, destination);
+        });
+    },
+};
+
+
+
 const prod = (process.argv[2] === "production");
 
-esbuild.build({
+await esbuild.build({
     banner: {
         js: banner,
     },
@@ -19,11 +66,6 @@ esbuild.build({
     bundle: true,
     external: [
         "obsidian",
-        "electron",
-        "@codemirror/state",
-        "@codemirror/view",
-        "@codemirror/language",
-        ...builtinModules,
     ],
     format: "cjs",
     target: "es2020",
@@ -31,5 +73,7 @@ esbuild.build({
     sourcemap: prod ? false : "inline",
     treeShaking: true,
     outfile: "main.js",
-    watch: !prod
+    watch: !prod,
+    plugins: [copyAssets]
+
 }).catch(() => process.exit(1));
